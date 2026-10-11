@@ -1,0 +1,697 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "URL Shortener API",
+    "description" : "Create short links for http/https URLs, redirect from a short code, read link details and click analytics.\n\nErrors use RFC 7807 `application/problem+json` with a stable `code` and a `traceId`. There is no authentication: the API is public and protected by rate limiting.",
+    "license" : {
+      "name" : "Interview assignment - no license"
+    },
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "http://localhost:8080",
+    "description" : "Configured base URL"
+  } ],
+  "tags" : [ {
+    "name" : "Short URLs",
+    "description" : "Create short URLs, read their details and click analytics."
+  }, {
+    "name" : "Redirect",
+    "description" : "The public short URL itself."
+  } ],
+  "paths" : {
+    "/api/v1/short-urls" : {
+      "post" : {
+        "tags" : [ "Short URLs" ],
+        "summary" : "Create a short link",
+        "description" : "Shortens an http/https URL. Optionally sets an expiration instant (must be in the future, at most 5 years ahead). The same URL may be shortened several times; each call creates a new link.",
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateLinkRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Link created.",
+            "headers" : {
+              "Location" : {
+                "description" : "Path of the new link resource.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "/api/v1/short-urls/aB3dE9x"
+                }
+              }
+            },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LinkResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "INVALID_URL (missing, malformed, unsupported scheme, private host in prod, ...), INVALID_EXPIRY (past or too far ahead) or MALFORMED_REQUEST (unreadable JSON).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413" : {
+            "description" : "Request body larger than 8 KB (PAYLOAD_TOO_LARGE).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "415" : {
+            "description" : "Content-Type is not application/json.",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429" : {
+            "description" : "Rate limit exceeded (RATE_LIMITED).",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Unexpected server or database error (INTERNAL_ERROR, DATABASE_ERROR).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Database temporarily unavailable (DATABASE_UNAVAILABLE). Safe to retry.",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/{code}" : {
+      "get" : {
+        "tags" : [ "Redirect" ],
+        "summary" : "Redirect to the original URL",
+        "description" : "Sends the browser to the original URL with a 302 and records the click asynchronously (timestamp, Referer and User-Agent; no IP address). HEAD requests redirect but are not counted. Browsers asking for text/html get a small HTML error page instead of JSON on 404/410.",
+        "operationId" : "redirect",
+        "parameters" : [ {
+          "name" : "code",
+          "in" : "path",
+          "description" : "Short code of the link.",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "example" : "aB3dE9x"
+        } ],
+        "responses" : {
+          "302" : {
+            "description" : "Redirect to the original URL.",
+            "headers" : {
+              "Cache-Control" : {
+                "description" : "Always no-store, so every click reaches the server.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "no-store"
+                }
+              },
+              "Location" : {
+                "description" : "The original URL.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "string",
+                  "example" : "https://example.com/some/long/path"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Unknown or malformed code (LINK_NOT_FOUND).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410" : {
+            "description" : "The link has expired (LINK_EXPIRED).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429" : {
+            "description" : "Rate limit exceeded (RATE_LIMITED).",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Unexpected server or database error (INTERNAL_ERROR, DATABASE_ERROR).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Database temporarily unavailable (DATABASE_UNAVAILABLE). Safe to retry.",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/short-urls/{code}" : {
+      "get" : {
+        "tags" : [ "Short URLs" ],
+        "summary" : "Get link details",
+        "description" : "Returns the original URL, expiration, status and all-time click count. Details stay readable after the link has expired (status EXPIRED).",
+        "operationId" : "details",
+        "parameters" : [ {
+          "name" : "code",
+          "in" : "path",
+          "description" : "Short code of the link.",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "example" : "aB3dE9x"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Link details.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LinkDetailsResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No link with this code (LINK_NOT_FOUND).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429" : {
+            "description" : "Rate limit exceeded (RATE_LIMITED).",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Unexpected server or database error (INTERNAL_ERROR, DATABASE_ERROR).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Database temporarily unavailable (DATABASE_UNAVAILABLE). Safe to retry.",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/short-urls/{code}/analytics" : {
+      "get" : {
+        "tags" : [ "Short URLs" ],
+        "summary" : "Get click analytics",
+        "description" : "Clicks per UTC time bucket, plus the most frequent referrers, for the range [from, to). Only non-empty buckets are returned. The range defaults to the last 30 days and may span at most 366 days.",
+        "operationId" : "analytics",
+        "parameters" : [ {
+          "name" : "code",
+          "in" : "path",
+          "description" : "Short code of the link.",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "example" : "aB3dE9x"
+        }, {
+          "name" : "from",
+          "in" : "query",
+          "description" : "Inclusive start, ISO-8601 instant. Default: 30 days before `to`.",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "example" : "2026-10-01T00:00:00Z"
+        }, {
+          "name" : "to",
+          "in" : "query",
+          "description" : "Exclusive end, ISO-8601 instant. Default: now.",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "example" : "2026-10-08T00:00:00Z"
+        }, {
+          "name" : "granularity",
+          "in" : "query",
+          "description" : "Bucket size (case-insensitive). Default: DAY.",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "HOUR", "DAY" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Click analytics.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AnalyticsResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "INVALID_RANGE (from not before to, or range too long) or INVALID_PARAMETER (unparsable instant or unknown granularity).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No link with this code (LINK_NOT_FOUND).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429" : {
+            "description" : "Rate limit exceeded (RATE_LIMITED).",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Unexpected server or database error (INTERNAL_ERROR, DATABASE_ERROR).",
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Database temporarily unavailable (DATABASE_UNAVAILABLE). Safe to retry.",
+            "headers" : {
+              "Retry-After" : {
+                "description" : "Seconds to wait before retrying.",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "integer"
+                }
+              }
+            },
+            "content" : {
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "CreateLinkRequest" : {
+        "type" : "object",
+        "description" : "Request to create a short link.",
+        "properties" : {
+          "url" : {
+            "type" : "string",
+            "description" : "The http or https URL to shorten (ASCII, at most 2048 characters, no credentials).",
+            "example" : "https://example.com/some/long/path?utm_source=newsletter",
+            "maxLength" : 2048
+          },
+          "expiresAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Optional expiration instant (ISO-8601, UTC). Must be in the future and at most 5 years ahead. Omit for a link that never expires.",
+            "example" : "2027-01-01T00:00:00Z"
+          }
+        },
+        "required" : [ "url" ]
+      },
+      "LinkResponse" : {
+        "type" : "object",
+        "description" : "A newly created short link.",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "description" : "The 7-character base62 short code.",
+            "example" : "aB3dE9x"
+          },
+          "shortUrl" : {
+            "type" : "string",
+            "description" : "Full short URL to share.",
+            "example" : "http://localhost:8080/aB3dE9x"
+          },
+          "originalUrl" : {
+            "type" : "string",
+            "description" : "The (normalized) URL the short link redirects to.",
+            "example" : "https://example.com/some/long/path?utm_source=newsletter"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Creation instant (UTC).",
+            "example" : "2026-10-10T09:30:00Z"
+          },
+          "expiresAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Expiration instant (UTC), or null if the link never expires.",
+            "example" : "2027-01-01T00:00:00Z"
+          }
+        }
+      },
+      "ApiError" : {
+        "type" : "object",
+        "description" : "Error response (RFC 7807 problem details with two extensions).",
+        "properties" : {
+          "type" : {
+            "type" : "string",
+            "description" : "URI reference identifying the problem type.",
+            "example" : "urn:urlshortener:problem:link-not-found"
+          },
+          "title" : {
+            "type" : "string",
+            "description" : "Short, human-readable summary of the HTTP status.",
+            "example" : "Not Found"
+          },
+          "status" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "HTTP status code.",
+            "example" : 404
+          },
+          "detail" : {
+            "type" : "string",
+            "description" : "Human-readable explanation. Never contains internal details.",
+            "example" : "No link exists for code 'abc1234'."
+          },
+          "instance" : {
+            "type" : "string",
+            "description" : "Request path the error relates to.",
+            "example" : "/api/v1/short-urls/abc1234"
+          },
+          "code" : {
+            "type" : "string",
+            "description" : "Stable machine-readable error code. Clients should branch on this, not on 'detail'. Application codes: INVALID_URL, INVALID_EXPIRY, INVALID_RANGE, INVALID_PARAMETER, MALFORMED_REQUEST, LINK_NOT_FOUND, LINK_EXPIRED, RATE_LIMITED, PAYLOAD_TOO_LARGE, DATABASE_UNAVAILABLE, CODE_ALLOCATION_FAILED, DATABASE_ERROR, INTERNAL_ERROR. Errors raised by the framework itself (e.g. wrong method or media type) use the HTTP status name, such as METHOD_NOT_ALLOWED.",
+            "example" : "LINK_NOT_FOUND"
+          },
+          "traceId" : {
+            "type" : "string",
+            "description" : "Correlation id of the request; also returned in the X-Correlation-Id header. Quote it when reporting a problem.",
+            "example" : "6f1c2d9e4b7a4c0f"
+          }
+        }
+      },
+      "LinkDetailsResponse" : {
+        "type" : "object",
+        "description" : "Details of a short link.",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "description" : "The 7-character base62 short code.",
+            "example" : "aB3dE9x"
+          },
+          "shortUrl" : {
+            "type" : "string",
+            "description" : "Full short URL to share.",
+            "example" : "http://localhost:8080/aB3dE9x"
+          },
+          "originalUrl" : {
+            "type" : "string",
+            "description" : "The URL the short link redirects to.",
+            "example" : "https://example.com/some/long/path"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Creation instant (UTC).",
+            "example" : "2026-10-10T09:30:00Z"
+          },
+          "expiresAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Expiration instant (UTC), or null if the link never expires.",
+            "example" : "2027-01-01T00:00:00Z"
+          },
+          "status" : {
+            "type" : "string",
+            "description" : "ACTIVE redirects; EXPIRED answers 410 Gone.",
+            "enum" : [ "ACTIVE", "EXPIRED" ]
+          },
+          "totalClicks" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "All-time number of recorded clicks.",
+            "example" : 42
+          }
+        }
+      },
+      "AnalyticsResponse" : {
+        "type" : "object",
+        "description" : "Click analytics of one link for a time range.",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "description" : "The 7-character base62 short code.",
+            "example" : "aB3dE9x"
+          },
+          "totalClicks" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "All-time number of recorded clicks (independent of the range).",
+            "example" : 42
+          },
+          "clicksInRange" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Clicks within [from, to); equals the sum of the series.",
+            "example" : 12
+          },
+          "from" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Effective inclusive start of the range.",
+            "example" : "2026-09-10T09:30:00Z"
+          },
+          "to" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Effective exclusive end of the range.",
+            "example" : "2026-10-10T09:30:00Z"
+          },
+          "granularity" : {
+            "type" : "string",
+            "description" : "Bucket size used for the series.",
+            "enum" : [ "HOUR", "DAY" ]
+          },
+          "series" : {
+            "type" : "array",
+            "description" : "Non-empty buckets only, oldest first. Empty when there were no clicks.",
+            "items" : {
+              "$ref" : "#/components/schemas/ClickBucket"
+            }
+          },
+          "topReferrers" : {
+            "type" : "array",
+            "description" : "Most frequent referrers in the range, at most 10, most frequent first.",
+            "items" : {
+              "$ref" : "#/components/schemas/ReferrerStat"
+            }
+          }
+        }
+      },
+      "ClickBucket" : {
+        "type" : "object",
+        "description" : "Clicks in one UTC-aligned time bucket.",
+        "properties" : {
+          "bucketStart" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Start of the bucket (inclusive, UTC).",
+            "example" : "2026-10-09T00:00:00Z"
+          },
+          "clicks" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Clicks in the bucket (always at least 1; empty buckets are omitted).",
+            "example" : 7
+          }
+        }
+      },
+      "ReferrerStat" : {
+        "type" : "object",
+        "description" : "Click count for one Referer header value.",
+        "properties" : {
+          "referrer" : {
+            "type" : "string",
+            "description" : "Referer header value as sent by the browser (truncated to 512 characters). Clicks without a referrer are not listed here.",
+            "example" : "https://news.example.org/post/1"
+          },
+          "clicks" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Clicks with this referrer in the range.",
+            "example" : 5
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+# Optional in-cluster PostgreSQL for a demo cluster only.
+# Prefer a managed database (Cloud SQL, RDS, Azure Database) in a real cloud deploy
+# and skip this file. If you use this, set the app Secret DB_URL to:
+#   jdbc:postgresql://postgres.url-shortener.svc.cluster.local:5432/urlshortener
+# and use the same username/password as below.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+  namespace: url-shortener
+type: Opaque
+stringData:
+  POSTGRES_DB: "urlshortener"
+  POSTGRES_USER: "urlshortener"
+  POSTGRES_PASSWORD: "change-me"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres
+  namespace: url-shortener
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: url-shortener
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "urlshortener", "-d", "urlshortener"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "urlshortener", "-d", "urlshortener"]
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: url-shortener
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

@@ -1,0 +1,45 @@
+# LOCAL profile: in-memory H2 (data is lost on restart). No external services needed.
+spring:
+  datasource:
+    # PostgreSQL compatibility mode keeps SQL behavior close to prod.
+    url: jdbc:h2:mem:urlshortener;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    # Schema comes from Flyway migrations (same as prod); Hibernate only validates it.
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+app:
+  base-url: http://localhost:8080
+  url-validation:
+    # Allow http://localhost:... style URLs so redirects can be tested locally
+    allow-private-hosts: true
+  cors:
+    # Angular dev server
+    allowed-origins:
+      - http://localhost:4200
+  rate-limit:
+    # Generous so manual testing and the Angular dev server are not throttled
+    create-per-minute: 300
+    miss-per-minute: 300
+    analytics-per-minute: 300
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.bharath.projects.urlshortener: DEBUG

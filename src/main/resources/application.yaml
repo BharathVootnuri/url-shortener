@@ -1,0 +1,75 @@
+# Shared settings for every environment.
+# Environment-specific values live in application-local.yaml and application-prod.yaml.
+#
+# Profile selection:
+#   - default            -> "local" (H2, in-memory)         run: mvnw spring-boot:run
+#   - SPRING_PROFILES_ACTIVE=prod -> PostgreSQL            run: set SPRING_PROFILES_ACTIVE=prod
+spring:
+  application:
+    name: url-shortener
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+# Application settings (values below are the safe/prod-like defaults; local overrides what it needs)
+app:
+  # Base used to build the returned shortUrl
+  base-url: http://localhost:8080
+  short-code:
+    length: 7
+    max-collision-retries: 5
+  # Async click recording: bounded in-process executor. When the queue is full, clicks are dropped.
+  click-recording:
+    core-pool-size: 2
+    max-pool-size: 4
+    queue-capacity: 1000
+    shutdown-timeout-seconds: 10
+  url-validation:
+    max-length: 2048
+    # Reject localhost / loopback / link-local / private-range hosts
+    allow-private-hosts: false
+  cors:
+    allowed-origins: []
+  # In-memory, per client IP. See RateLimiter.
+  rate-limit:
+    enabled: true
+    create-per-minute: 30   # link creations per minute (burst = same number)
+    miss-per-minute: 60     # unknown-code lookups per minute before throttling (anti-enumeration)
+    analytics-per-minute: 30  # analytics requests per minute (the one expensive read)
+
+# OpenAPI spec at /v3/api-docs, Swagger UI at /swagger-ui.html. Prod turns both off.
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+  # Error responses are documented explicitly (see CommonErrorResponses); don't let springdoc guess
+  # from the ResponseEntity<Object> exception handlers.
+  override-with-generic-response: false
+
+# Only the health endpoint is exposed by default; local adds metrics.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  pattern:
+    # Adds the per-request correlation id (see CorrelationIdFilter) to every log line.
+    level: "%5p [%X{traceId:-}]"

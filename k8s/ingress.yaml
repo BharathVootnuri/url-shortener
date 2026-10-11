@@ -1,0 +1,27 @@
+# Generic Ingress. Point the host at your cluster ingress (nginx, GKE, AKS, …)
+# and set APP_BASE_URL in configmap.yaml to the same public origin.
+# For TLS, uncomment the tls block and attach a certificate (cert-manager, cloud cert, …).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: url-shortener
+  namespace: url-shortener
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "8k"
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts:
+  #       - short.example.com
+  #     secretName: url-shortener-tls
+  rules:
+    - host: short.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: url-shortener
+                port:
+                  name: http
