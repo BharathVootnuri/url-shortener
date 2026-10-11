@@ -1,0 +1,81 @@
+<section class="card">
+  <div class="title-row">
+    <h1>Analytics for <code>{{ code() }}</code></h1>
+    <a class="button secondary" [routerLink]="['/links', code()]">Link details</a>
+  </div>
+
+  @let s = state();
+  @if (s.status === 'error' && isGone(s.problem)) {
+    <h2>Link not found</h2>
+    <p data-testid="gone-message">{{ s.problem.message }}</p>
+    <a class="button" routerLink="/">Create a new link</a>
+  } @else {
+    <div class="range" role="group" aria-label="Time range">
+      @for (p of presets; track p.id) {
+        <button type="button" class="chip" [class.active]="p === preset()" [attr.aria-pressed]="p === preset()" (click)="select(p)">
+          {{ p.label }}
+        </button>
+      }
+    </div>
+
+    @if (s.status === 'loading') {
+      <p class="loading" role="status">Loading analytics…</p>
+    } @else if (s.status === 'error') {
+      <app-error-panel [problem]="s.problem" (retry)="reload()" />
+    } @else {
+      @let a = s.data;
+      <div class="stats">
+        <div class="stat">
+          <span class="stat-value" data-testid="total-clicks">{{ a.totalClicks }}</span>
+          <span class="stat-label">Total clicks (all time)</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value" data-testid="range-clicks">{{ a.clicksInRange }}</span>
+          <span class="stat-label">Clicks in {{ preset().label.toLowerCase() }}</span>
+        </div>
+      </div>
+
+      @if (a.clicksInRange === 0) {
+        <p class="empty" data-testid="empty">
+          No clicks recorded in this period.
+        </p>
+        <button type="button" class="secondary" (click)="reload()">Refresh</button>
+      } @else {
+        <h2>Clicks per {{ a.granularity === 'DAY' ? 'day' : 'hour' }} <span class="muted">(UTC)</span></h2>
+        <app-click-chart [buckets]="dense()" [granularity]="a.granularity" />
+
+        <details class="data-table">
+          <summary>Show data table</summary>
+          <table>
+            <caption class="sr-only">Clicks per {{ a.granularity === 'DAY' ? 'day' : 'hour' }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ a.granularity === 'DAY' ? 'Day' : 'Hour' }} (UTC)</th>
+                <th scope="col" class="num">Clicks</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of dense(); track row.bucketStart) {
+                <tr>
+                  <td>{{ row.bucketStart | date: (a.granularity === 'DAY' ? 'yyyy-MM-dd' : 'yyyy-MM-dd HH:mm') : 'UTC' }}</td>
+                  <td class="num">{{ row.clicks }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </details>
+
+        <h2>Top referrers</h2>
+        @if (a.topReferrers.length === 0) {
+          <p class="muted">No referrer information was recorded for these clicks.</p>
+        } @else {
+          <ol class="referrers" data-testid="referrers">
+            @for (r of a.topReferrers; track r.referrer) {
+              <li><span class="break">{{ r.referrer }}</span> <strong>{{ r.clicks }}</strong></li>
+            }
+          </ol>
+        }
+      }
+    }
+  }
+</section>

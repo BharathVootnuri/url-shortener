@@ -1,0 +1,71 @@
+<section class="card">
+  @if (result(); as link) {
+    <h1>Your short link is ready</h1>
+
+    <div class="result" data-testid="result">
+      <label for="short-url">Short URL</label>
+      <div class="row">
+        <input id="short-url" type="text" readonly [value]="link.shortUrl" (focus)="$any($event.target).select()" />
+        <app-copy-button [text]="link.shortUrl" label="Copy" />
+      </div>
+
+      <dl class="facts">
+        <dt>Redirects to</dt>
+        <dd class="break">{{ link.originalUrl }}</dd>
+        <dt>Expires</dt>
+        <dd>{{ link.expiresAt ? (link.expiresAt | date: 'medium') : 'Never' }}</dd>
+      </dl>
+
+      <div class="actions">
+        <a class="button" [routerLink]="['/links', link.code]">View details</a>
+        <a class="button secondary" [routerLink]="['/links', link.code, 'analytics']">View analytics</a>
+        <button type="button" class="link" (click)="createAnother()">Shorten another URL</button>
+      </div>
+    </div>
+  } @else {
+    <h1>Shorten a URL</h1>
+    <p class="muted">Paste a long http or https address and get a short link you can share.</p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="field">
+        <label for="url">Long URL</label>
+        <input
+          id="url"
+          type="text"
+          inputmode="url"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://example.com/some/long/path"
+          formControlName="url"
+          [attr.aria-invalid]="urlMessage() ? 'true' : null"
+          [attr.aria-describedby]="urlMessage() ? 'url-error' : null"
+        />
+        @if (urlMessage(); as message) {
+          <p id="url-error" class="field-error" data-testid="url-error">{{ message }}</p>
+        }
+      </div>
+
+      <div class="field">
+        <label for="expiresAt">Expires <span class="muted">(optional, your local time)</span></label>
+        <input
+          id="expiresAt"
+          type="datetime-local"
+          formControlName="expiresAt"
+          [attr.aria-invalid]="expiryMessage() ? 'true' : null"
+          [attr.aria-describedby]="expiryMessage() ? 'expiry-error' : null"
+        />
+        @if (expiryMessage(); as message) {
+          <p id="expiry-error" class="field-error" data-testid="expiry-error">{{ message }}</p>
+        }
+      </div>
+
+      @if (generalProblem(); as problem) {
+        <app-error-panel [problem]="problem" [showRetry]="false" />
+      }
+
+      <button type="submit" [disabled]="submitting()" [attr.aria-busy]="submitting()">
+        {{ submitting() ? 'Creating…' : 'Create short link' }}
+      </button>
+    </form>
+  }
+</section>

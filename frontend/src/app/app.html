@@ -1,0 +1,41 @@
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <a class="brand" routerLink="/">URL Shortener & Analytics</a>
+</header>
+
+<div class="layout">
+  <main id="main" class="layout-main">
+    <router-outlet />
+  </main>
+
+  <aside class="layout-side" aria-labelledby="short-links-title">
+    <section class="card">
+      <h2 id="short-links-title">Short links</h2>
+      <p class="muted">Paste a short URL or code to follow it, or to see its details and analytics.</p>
+
+      <form class="lookup" (submit)="openShortLink($event)" role="search" novalidate>
+        <label for="lookup">Short URL or code</label>
+        <input
+          id="lookup"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="http://localhost:8080/aB3dE9x"
+          [formControl]="lookup"
+          [attr.aria-invalid]="lookupError() ? 'true' : null"
+          [attr.aria-describedby]="lookupError() ? 'lookup-error' : null"
+        />
+        @if (lookupError(); as message) {
+          <p id="lookup-error" class="field-error" role="alert">{{ message }}</p>
+        }
+        <div class="actions">
+          <button type="submit" title="Follow the short link in a new tab">Open</button>
+          <button type="button" class="secondary" title="Show the link's details in this app" (click)="showDetails()">
+            Details
+          </button>
+        </div>
+      </form>
+    </section>
+  </aside>
+</div>

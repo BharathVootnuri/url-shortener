@@ -1,0 +1,56 @@
+<section class="card">
+  @let s = state();
+  @if (s.status === 'loading') {
+    <p class="loading" role="status">Loading link…</p>
+  } @else if (s.status === 'error') {
+    @if (isGone(s.problem)) {
+      <h1>{{ s.problem.status === 410 ? 'This link has expired' : 'Link not found' }}</h1>
+      <p data-testid="gone-message">{{ s.problem.message }}</p>
+      @if (s.problem.traceId) {
+        <p class="muted">Reference: <code>{{ s.problem.traceId }}</code></p>
+      }
+      <a class="button" routerLink="/">Create a new link</a>
+    } @else {
+      <h1>Could not load the link</h1>
+      <app-error-panel [problem]="s.problem" (retry)="reload()" />
+    }
+  } @else {
+    @let link = s.data;
+    <div class="title-row">
+      <h1>Link <code>{{ link.code }}</code></h1>
+      <span
+        class="badge"
+        [class.badge-ok]="link.status === 'ACTIVE'"
+        [class.badge-warn]="link.status === 'EXPIRED'"
+        data-testid="status"
+      >
+        {{ link.status === 'ACTIVE' ? 'Active' : 'Expired' }}
+      </span>
+    </div>
+
+    @if (link.status === 'EXPIRED') {
+      <p class="notice" role="alert">This link has expired.</p>
+    }
+
+    <dl class="facts">
+      <dt>Short URL</dt>
+      <dd>
+        <a [href]="link.shortUrl" target="_blank" rel="noopener noreferrer">{{ link.shortUrl }}</a>
+        <app-copy-button [text]="link.shortUrl" />
+      </dd>
+      <dt>Original URL</dt>
+      <dd class="break">{{ link.originalUrl }}</dd>
+      <dt>Created</dt>
+      <dd>{{ link.createdAt | date: 'medium' }}</dd>
+      <dt>Expires</dt>
+      <dd>{{ link.expiresAt ? (link.expiresAt | date: 'medium') : 'Never' }}</dd>
+      <dt>Total clicks</dt>
+      <dd data-testid="total-clicks">{{ link.totalClicks }}</dd>
+    </dl>
+
+    <div class="actions">
+      <a class="button" [routerLink]="['/links', link.code, 'analytics']">View analytics</a>
+      <a class="button secondary" routerLink="/">Create another</a>
+    </div>
+  }
+</section>
